@@ -1,39 +1,45 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import type { Report } from "$lib/types/report";
     import ReportItem from "$lib/components/ReportItem.svelte";
     import ReportForm from "$lib/components/ReportForm.svelte";
+    import type { ReportRespone } from "$lib/types/report";
 
     let email = $state("");
     let reportType = $state("Sales");
     let count = 1;
     let isSubmitted = $state(false);
-    let isGenerated = $state(false);
-
+    let loading = $state(true);
+    let error = $state<string | null>(null);
     let reports = $state<Report[]>([]);
+    let processingReport = $state(0);
+    let totalReport = $state(0);
+    let completedReport = $state(0);
 
-    let totalReport = $derived(reports.length);
-    let completedReport = $derived(
-        reports.filter((x) => x.status == "completed").length,
-    );
-    let processingReport = $derived(
-        reports.filter((x) => x.status == "processing").length,
-    );
-    function handleSubmit() {
-        if (!email.trim()) return;
-        isSubmitted = true;
-        console.log("prviet");
-        reports.push({
-            id: count++,
-            type: reportType,
-            email: email,
-            status: "queued",
-        });
-        setTimeout(() => (isSubmitted = false), 2000);
+    async function getReports() {
+        const response = await fetch(`http://127.0.0.1:8000/reports`);
+        return await response.json();
     }
 
-    function handleStatus(reportId: number) {
-        const report = reports.find((x) => x.id == reportId);
-        if (!report) return;
+    async function handleSubmit() {
+        if (!email.trim()) return;
+        const data: ReportRespone = {
+            email: email,
+            status: "queued",
+            type: "Customers",
+        };
+        await generateReport(data);
+        console.log("prviet");
+        isSubmitted = false;
+    }
+
+    async function handleStatus(reportId: number) {
+        const response = await fetch(
+            `http://127.0.0.1:8000/reports/${reportId}`,
+        );
+        if (!response) return;
+        const report = await response.json();
+
         switch (report.status) {
             case "queued":
                 report.status = "processing";
@@ -44,12 +50,31 @@
         }
     }
 
-    async function generateReport(){
-        await new Promise((resolve) => {
-        setTimeout(resolve, 3000);
+    async function generateReport(data: ReportRespone) {
+        isSubmitted = true;
+        const response = await fetch(`http://127.0.0.1:8000/reports/create`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(data),
         });
-        isGenerated = true
+        if (!response) return;
+
+        await new Promise((resolve) => {
+            setTimeout(resolve, 3000);
+        });
     }
+
+    onMount(async () => {
+        try {
+            reports = await getReports();
+        } catch (err) {
+            error = err instanceof Error ? err.message : "Unknown error";
+        } finally {
+            loading = false;
+        }
+    });
 </script>
 
 <section>
